@@ -1,8 +1,11 @@
 import datasets
+from datasets import load_from_disk, concatenate_datasets
 import random
 import numpy as np
 import json
-
+import os
+import pyarrow as pa
+import shutil
 '''
 这段代码是一个Python脚本，它涉及到处理Natural Questions (NQ)数据集的过程.
 总的来说，这个脚本的目的是从Natural Questions数据集中随机选择文档，然后将这些文档和相关的问题分为两个文件：一个用于多任务训练，另一个用于验证。
@@ -10,8 +13,8 @@ import json
 # 设置随机种子和数据集大小
 random.seed(313)
 
-NUM_TRAIN = 8000
-NUM_EVAL = 2000
+NUM_TRAIN = 6000
+NUM_EVAL = 1830
 # 这里设置了随机种子以确保随机过程的可重复性，并定义了训练数据和验证数据的大小。
 # 加载Natural Questions数据集
 # 这行代码使用datasets库加载Natural Questions数据集的训练部分。
@@ -19,8 +22,14 @@ NUM_EVAL = 2000
 #                              token="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",
 #                              cache_dir="E:/pycharm_gc/pytorch/task/DSI-transformers-main/datasets",
 #                              split='train[:100000]')  # 这里仅下载训练数据的前10%。
-data = datasets.load_from_disk(dataset_path ="E:/pycharm_gc/pytorch/task/DSI-transformers-main/datasets/train")
-valid_data = datasets.load_from_disk(dataset_path = "E:/pycharm_gc/pytorch/task/DSI-transformers-main/datasets/valid")
+
+# 获取训练和验证数据集的目录路径
+train_path = "E:/pycharm_gc/pytorch/task/DSI-transformers-main/datasets/train"
+valid_path = "E:/pycharm_gc/pytorch/task/DSI-transformers-main/datasets/valid"
+
+data = load_from_disk(dataset_path=valid_path)
+print('dataset finished')
+
 
 # 随机洗牌数据集索引，这里首先为整个数据集创建一个索引列表，然后随机洗牌这些索引。
 rand_inds = list(range(len(data)))
@@ -33,14 +42,16 @@ current_docid = 0# current_docid：用于为每个文档分配一个唯一的ID�
 # 这里使用Python的with语句同时打开两个文件：一个用于训练数据(tf)，另一个用于验证数据(vf)。
 with open('NQ_10k_multi_task_train.json', 'w') as tf, \
         open('NQ_10k_valid.json', 'w') as vf:
+    print('starting...')
     for ind in rand_inds:# 遍历随机化的索引
         # 提取每个文档的标题，并检查该标题是否已在title_set中
+        print(f'start {ind}')
         title = data[ind]['document']['title']  # we use title as the doc identifier to prevent two docs have the same text
         if title not in title_set:
             title_set.add(title)# 处理新文档并添加标题到title_set, 确保之后不会重复处理
 
             # 提取文档的tokens并组合成文本
-            token_inds = np.where(np.array(data[ind]['document']['tokens']['is_html']) == False)[0]# 使用np.where找到非HTML tokens的索引
+            token_inds = np.where(np.array(data[ind]['document']['tokens']['is_html']) == False)[0]# 使用np.where找到非HTML tokens的索引, 是个元组
             tokens = np.array(data[ind]['document']['tokens']['token'])[token_inds]# 使用这些索引从tokens中提取出非HTML的文本内容。
             doc_text = " ".join(tokens)# 使用join方法将这些tokens组合成一个完整的文档文本。
             question_text = data[ind]['question']['text']# 提取问题文本,从当前数据中提取与文档相关的问题文本。
